@@ -63,7 +63,8 @@ with tab_var:
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Budget", f"${summary['total_budget']:,.0f}")
     c2.metric("Total Actual", f"${summary['total_actual']:,.0f}")
-    c3.metric("Variance", f"${summary['total_variance']:,.0f}", summary["status"])
+    c3.metric("Variance", f"${summary['total_variance']:,.0f}", summary["status"],
+          delta_color="normal" if summary["status"] == "Favorable" else "inverse")
 
     fig = px.bar(
         report, x="category", y="variance", color="status",

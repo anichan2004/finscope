@@ -1,4 +1,12 @@
 # FinScope — A Personal FP&A Platform
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-FF4B4B?logo=streamlit)](YOUR_STREAMLIT_URL)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/anichan2004/finscope/blob/main/notebooks/finscope_colab.ipynb)
+[![CI](https://github.com/anichan2004/finscope/actions/workflows/ci.yml/badge.svg)](https://github.com/anichan2004/finscope/actions/workflows/ci.yml)
+
+**[▶ Try the live dashboard](https://finscope-p5urvdzp2du7ulmumu3jeq.streamlit.app/)** · built with Python, SQL, and live market data.
+
+<img width="1893" height="935" alt="Screenshot 2026-06-11 181852" src="https://github.com/user-attachments/assets/3d88b96d-cad4-4529-ac4f-0f6cb4db9f9e" />
+
 
 FinScope applies the methods a corporate **Financial Planning & Analysis (FP&A)** team
 uses to run a business — budget-vs-actual variance analysis, rolling forecasts,

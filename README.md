@@ -5,7 +5,7 @@
 
 **[▶ Try the live dashboard](https://finscope-p5urvdzp2du7ulmumu3jeq.streamlit.app/)** · built with Python, SQL, and live market data.
 
-<img width="1893" height="935" alt="Screenshot 2026-06-11 181852" src="https://github.com/user-attachments/assets/3d88b96d-cad4-4529-ac4f-0f6cb4db9f9e" />
+<img width="1837" height="1017" alt="image" src="https://github.com/user-attachments/assets/04987ec4-ae98-4be1-86d8-7a87cf453b92" />
 
 
 FinScope applies the methods a corporate **Financial Planning & Analysis (FP&A)** team

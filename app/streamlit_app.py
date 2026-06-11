@@ -1,7 +1,6 @@
 """FinScope dashboard.
 
 Run:  streamlit run app/streamlit_app.py
-(Run `python -m scripts.setup_data` first to populate the database.)
 """
 from __future__ import annotations
 
@@ -18,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from finscope import (  # noqa: E402
     config,
+    data_generator,
     database,
     forecast,
     montecarlo,
@@ -33,14 +33,18 @@ def load_actuals() -> pd.DataFrame:
     conn = database.connect()
     database.init_db(conn)
     actuals = database.monthly_actuals(conn)
+    if actuals.empty:
+        # First run (e.g. a fresh cloud deploy with no database yet):
+        # build the synthetic dataset on the fly so the demo just works.
+        df = data_generator.generate_transactions(n_months=24)
+        database.load_transactions(conn, df)
+        database.load_budgets(conn)
+        actuals = database.monthly_actuals(conn)
     conn.close()
     return actuals
 
 
 actuals = load_actuals()
-if actuals.empty:
-    st.error("No data found. Run `python -m scripts.setup_data` first.")
-    st.stop()
 
 st.title("FinScope — Personal FP&A Platform")
 st.caption("Budget variance · rolling forecast · Monte Carlo planning · financial statements")

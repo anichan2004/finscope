@@ -60,10 +60,43 @@ def backtest_mape(
 
     train, test = series.iloc[:-holdout], series.iloc[-holdout:]
     fc = exp_smoothing_forecast(train, horizon=holdout, alpha=alpha)
+    return _mape(test.to_numpy(dtype=float), fc.to_numpy(dtype=float))
 
-    actual = test.to_numpy(dtype=float)
-    pred = fc.to_numpy(dtype=float)
-    # avoid divide-by-zero on near-break-even months
+
+def _mape(actual: np.ndarray, pred: np.ndarray) -> float:
     denom = np.where(np.abs(actual) < 1e-6, np.nan, np.abs(actual))
-    mape = np.nanmean(np.abs((actual - pred) / denom))
-    return float(mape)
+    return float(np.nanmean(np.abs((actual - pred) / denom)))
+
+
+def compare_models(actuals: pd.DataFrame, holdout: int = 6) -> pd.DataFrame:
+    """Backtest several candidate models and rank them by MAPE.
+
+    Models:
+      * Naive (last value carried forward) -- the baseline any model must beat
+      * 3-month moving average
+      * Exponential smoothing (the production model)
+
+    Showing the comparison is the point: model choice should be evidenced,
+    not assumed.
+    """
+    series = _monthly_net_series(actuals)
+    if len(series) <= holdout + 3:
+        raise ValueError("Not enough history to backtest")
+
+    train, test = series.iloc[:-holdout], series.iloc[-holdout:]
+    actual = test.to_numpy(dtype=float)
+
+    results = []
+
+    naive_pred = np.full(holdout, float(train.iloc[-1]))
+    results.append(("Naive (last value)", _mape(actual, naive_pred)))
+
+    ma_pred = np.full(holdout, float(train.iloc[-3:].mean()))
+    results.append(("3-month moving average", _mape(actual, ma_pred)))
+
+    es = exp_smoothing_forecast(train, horizon=holdout)
+    results.append(("Exponential smoothing", _mape(actual, es.to_numpy(dtype=float))))
+
+    df = pd.DataFrame(results, columns=["model", "mape"]).sort_values("mape")
+    df["mape"] = df["mape"].round(4)
+    return df.reset_index(drop=True)

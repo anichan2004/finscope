@@ -48,6 +48,10 @@ RED = "#ef4444"
 GREEN_FAV = "#2e7d32"
 RED_UNFAV = "#c62828"
 
+# Plotly Express bakes colors in at figure creation, so the template's
+# colorway never reaches px charts -- set the palette as the px default too.
+px.defaults.color_discrete_sequence = [ACCENT, BLUE, AMBER, RED]
+
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -76,7 +80,12 @@ hr { border-color: #2a3142; }
 
 
 def style_fig(fig: go.Figure, height: int = 380) -> go.Figure:
-    """One chart language for the whole app."""
+    """One chart language for the whole app.
+
+    Layout contract: title anchored top-LEFT, legend anchored top-RIGHT on
+    the same band (so they never collide), no legend titles, margins wide
+    enough that axis titles don't clip.
+    """
     fig.update_layout(
         template="plotly_dark",
         colorway=[ACCENT, BLUE, AMBER, RED],
@@ -84,9 +93,12 @@ def style_fig(fig: go.Figure, height: int = 380) -> go.Figure:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         height=height,
-        margin=dict(t=48, r=16, b=8, l=8),
+        margin=dict(t=70, r=20, b=45, l=55),
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        title=dict(x=0.01, xanchor="left", y=0.97, yanchor="top",
+                   font=dict(size=16)),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0,
+                    xanchor="right", x=1, title_text=""),
     )
     fig.update_xaxes(gridcolor="#222838", zeroline=False)
     fig.update_yaxes(gridcolor="#222838", zeroline=False)

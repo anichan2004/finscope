@@ -131,7 +131,11 @@ with tab_fc:
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Model selection (6-month holdout backtest)")
-    st.caption("The production model must beat the naive baseline to earn its place.")
+    st.caption("Champion/challenger: production auto-ships whichever model wins "
+               "the backtest. A seasonal challenger was tested and **lost** — "
+               "with limited history, estimating 12 monthly indices overfits "
+               "noise in 10 months to capture signal in 2. The simpler model "
+               "keeps its job until the evidence says otherwise.")
     try:
         comp = forecast.compare_models(actuals)
         comp["mape"] = comp["mape"].map(lambda m: f"{m:.1%}")

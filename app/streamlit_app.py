@@ -28,19 +28,41 @@ from finscope import (  # noqa: E402
     variance,
 )
 
-st.set_page_config(page_title="FinScope — Personal FP&A", layout="wide")
+st.set_page_config(page_title="FinScope — Personal FP&A", page_icon="📊",
+                   layout="wide")
 
 
 @st.cache_data(ttl=24 * 3600, show_spinner="Pulling live market data...")
 def load_live_assumptions() -> dict:
     """Live S&P 500 return/vol + inflation, cached for a day.
 
-    Falls back to config defaults automatically if the network is
-    unavailable (market_data handles the degradation)."""
+    If the fetch fails (e.g. Yahoo rate-limits cloud IPs), the failure is NOT
+    kept in cache -- it self-clears so the next load retries instead of
+    remembering a bad moment for 24 hours."""
     import os
-    return market_data.derive_assumptions(
+    data = market_data.derive_assumptions(
         fred_api_key=os.environ.get("FRED_API_KEY")
     )
+    if data["source"] != "live market data":
+        load_live_assumptions.clear()
+    return data
+
+
+with st.sidebar:
+    st.title("📊 FinScope")
+    st.caption("A personal FP&A platform — corporate finance methods applied "
+               "to personal finances, plus real company analysis.")
+    st.markdown("**Data sources**")
+    st.markdown(
+        "- Transactions — synthetic *(by design: bank data is private)*\n"
+        "- S&P 500 returns — 🟢 live (yfinance/Stooq)\n"
+        "- Inflation — 🟢 live (FRED CPI)\n"
+        "- Company filings — 🟢 live (SEC EDGAR)"
+    )
+    st.markdown("---")
+    st.markdown("[View source on GitHub]"
+                "(https://github.com/anichan2004/finscope)")
+    st.caption("Python · pandas · SQL · Streamlit · pytest · CI")
 
 
 @st.cache_data
@@ -81,10 +103,23 @@ with tab_var:
     summary = variance.variance_summary(report)
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Budget", f"${summary['total_budget']:,.0f}")
-    c2.metric("Total Actual", f"${summary['total_actual']:,.0f}")
+    c1.metric("Total Budget", f"${summary['total_budget']:,.0f}",
+              help="Sum of the monthly plan across all expense categories.")
+    c2.metric("Total Actual", f"${summary['total_actual']:,.0f}",
+              help="What was actually spent this month.")
     c3.metric("Variance", f"${summary['total_variance']:,.0f}", summary["status"],
-              delta_color="normal" if summary["status"] == "Favorable" else "inverse")
+              delta_color="normal" if summary["status"] == "Favorable" else "inverse",
+              help="Budget − Actual. Positive = favorable (under budget).")
+
+    with st.expander("How is this calculated?"):
+        st.markdown(
+            "Variance = **budget − actual** per category, so positive is "
+            "favorable (spent less than planned). Commentary flags any "
+            "variance beyond ±10% and compares the month's spend to the "
+            "trailing 3-month average to separate one-off blips from "
+            "developing trends — the same structure a real FP&A variance "
+            "report uses."
+        )
 
     st.subheader("Variance commentary")
     for line in variance.variance_commentary(actuals, report):
@@ -95,8 +130,35 @@ with tab_var:
         color_discrete_map={"Favorable": "#2e7d32", "Unfavorable": "#c62828"},
         title="Variance by category (positive = under budget)",
     )
+    fig.update_layout(hovermode="x")
     st.plotly_chart(fig, use_container_width=True)
-    st.dataframe(report, use_container_width=True)
+
+    disp = report.drop(columns=["month"]).copy()
+    disp["variance_pct"] = disp["variance_pct"] * 100
+    st.dataframe(
+        disp, use_container_width=True, hide_index=True,
+        column_config={
+            "category": st.column_config.TextColumn("Category"),
+            "budget": st.column_config.NumberColumn("Budget", format="$%.0f"),
+            "actual": st.column_config.NumberColumn("Actual", format="$%.0f"),
+            "variance": st.column_config.NumberColumn("Variance", format="$%.0f"),
+            "variance_pct": st.column_config.NumberColumn("Variance %", format="%.1f%%"),
+            "status": st.column_config.TextColumn("Status"),
+        },
+    )
+
+    # Surface the Excel automation: generate the formatted workbook on demand
+    import tempfile
+    from finscope import excel_report
+    xlsx_path = Path(tempfile.gettempdir()) / f"variance_{month}.xlsx"
+    excel_report.export_variance_report(report, xlsx_path)
+    st.download_button(
+        "⬇️ Download formatted Excel variance report",
+        data=xlsx_path.read_bytes(),
+        file_name=f"FinScope_variance_{month}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        help="Color-coded workbook generated with openpyxl.",
+    )
 
     st.subheader("Spend trend by category")
     trend_cats = st.multiselect(
@@ -118,9 +180,21 @@ with tab_fc:
     fc = forecast.forecast_cashflow(actuals, horizon=horizon)
     try:
         mape = forecast.backtest_mape(actuals)
-        st.metric("Backtest MAPE (production model)", f"{mape:.1%}")
+        st.metric("Backtest MAPE (production model)", f"{mape:.1%}",
+                  help="Mean Absolute Percentage Error: train on all but the "
+                       "last 6 months, forecast them, measure average % miss.")
     except ValueError:
         st.info("Not enough history to backtest.")
+
+    with st.expander("Why is the forecast flat?"):
+        st.markdown(
+            "The production model forecasts the **level** (a recency-weighted "
+            "average), not the wiggles — month-to-month variation here is "
+            "mostly noise, and modeling noise makes forecasts *worse*. A "
+            "seasonal challenger was backtested and lost (see the model "
+            "table below); production auto-selects whichever model the "
+            "evidence supports."
+        )
 
     fig = go.Figure()
     for kind, color in (("actual", "#1565c0"), ("forecast", "#ef6c00")):
@@ -153,7 +227,23 @@ with tab_mc:
                    f"vol {live['annual_return_std']:.1%}, "
                    f"inflation {live['annual_inflation']:.1%}.")
     else:
-        st.caption("Live market data unavailable — using static defaults.")
+        col_warn, col_btn = st.columns([4, 1])
+        col_warn.caption("Live market data temporarily unavailable (market data "
+                         "providers rate-limit cloud IPs) — using static "
+                         "defaults. Retry below.")
+        if col_btn.button("↻ Refresh live data"):
+            load_live_assumptions.clear()
+            st.rerun()
+
+    with st.expander("How does the simulation work?"):
+        st.markdown(
+            "10,000 possible futures are simulated: each month draws a random "
+            "market return (distribution fitted to real S&P 500 history), adds "
+            "your contribution, and compounds. Results are deflated to "
+            "**today's dollars** using inflation, so the goal keeps its "
+            "purchasing-power meaning. The output is a full distribution of "
+            "outcomes, not a single guess."
+        )
 
     d = config.SIM_DEFAULTS
     col = st.columns(3)
@@ -170,7 +260,9 @@ with tab_mc:
         goal=goal,
     )
     st.metric(f"Probability of reaching ${goal:,.0f} in {res.horizon_years} yrs",
-              f"{res.prob_goal:.1%}")
+              f"{res.prob_goal:.1%}",
+              help="Share of the 10,000 simulated paths whose terminal net "
+                   "worth (in today's dollars) meets or exceeds the goal.")
 
     pct = res.percentiles()
     st.write({f"P{k}": f"${v:,.0f}" for k, v in pct.items()})
@@ -191,10 +283,16 @@ with tab_stmt:
     st.subheader("Key Metrics")
     k = statements.kpis(actuals, month=month)
     m = st.columns(4)
-    m[0].metric("Savings Rate", f"{k['savings_rate']:.1%}")
-    m[1].metric("Monthly Burn", f"${k['burn_rate']:,.0f}")
-    m[2].metric("Runway", f"{k['runway_months']:.0f} mo")
-    m[3].metric("Debt-to-Income", f"{k['debt_to_income']:.2f}")
+    m[0].metric("Savings Rate", f"{k['savings_rate']:.1%}",
+                help="Net income ÷ income. Advisors commonly target 20%+.")
+    m[1].metric("Monthly Burn", f"${k['burn_rate']:,.0f}",
+                help="Total monthly spending across all categories.")
+    m[2].metric("Runway", f"{k['runway_months']:.0f} mo",
+                help="Months liquid assets (cash + investments) would last at "
+                     "the current burn rate if income stopped.")
+    m[3].metric("Debt-to-Income", f"{k['debt_to_income']:.2f}",
+                help="Total debt ÷ annual income. Lenders typically prefer "
+                     "below 0.36.")
 
 # --- Company Analysis (real SEC EDGAR data) ---------------------------------
 with tab_co:
@@ -295,3 +393,14 @@ with tab_co:
             st.caption("Source: SEC EDGAR company facts (10-Q/10-K filings). "
                        "Q4 figures derived as FY minus reported quarters where "
                        "not filed directly.")
+
+            with st.expander("How are the filings parsed?"):
+                st.markdown(
+                    "Companies tag identical concepts differently in XBRL "
+                    "(`Revenues` vs `RevenueFromContractWithCustomer...`), so "
+                    "each concept tries an ordered list of candidate tags. "
+                    "And because companies file a full-year 10-K rather than "
+                    "a Q4 statement, **Q4 = FY − (Q1+Q2+Q3)** is derived "
+                    "automatically. Parsing is unit-tested against a "
+                    "controlled payload."
+                )

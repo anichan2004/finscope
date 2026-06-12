@@ -1,6 +1,7 @@
 """FinScope dashboard.
 
 Run:  streamlit run app/streamlit_app.py
+(Run `python -m scripts.setup_data` first to populate the database.)
 """
 from __future__ import annotations
 
@@ -20,12 +21,25 @@ from finscope import (  # noqa: E402
     data_generator,
     database,
     forecast,
+    market_data,
     montecarlo,
     statements,
     variance,
 )
 
 st.set_page_config(page_title="FinScope — Personal FP&A", layout="wide")
+
+
+@st.cache_data(ttl=24 * 3600, show_spinner="Pulling live market data...")
+def load_live_assumptions() -> dict:
+    """Live S&P 500 return/vol + inflation, cached for a day.
+
+    Falls back to config defaults automatically if the network is
+    unavailable (market_data handles the degradation)."""
+    import os
+    return market_data.derive_assumptions(
+        fred_api_key=os.environ.get("FRED_API_KEY")
+    )
 
 
 @st.cache_data
@@ -64,7 +78,11 @@ with tab_var:
     c1.metric("Total Budget", f"${summary['total_budget']:,.0f}")
     c2.metric("Total Actual", f"${summary['total_actual']:,.0f}")
     c3.metric("Variance", f"${summary['total_variance']:,.0f}", summary["status"],
-          delta_color="normal" if summary["status"] == "Favorable" else "inverse")
+              delta_color="normal" if summary["status"] == "Favorable" else "inverse")
+
+    st.subheader("Variance commentary")
+    for line in variance.variance_commentary(actuals, report):
+        st.markdown(f"- {line}")
 
     fig = px.bar(
         report, x="category", y="variance", color="status",
@@ -74,13 +92,27 @@ with tab_var:
     st.plotly_chart(fig, use_container_width=True)
     st.dataframe(report, use_container_width=True)
 
+    st.subheader("Spend trend by category")
+    trend_cats = st.multiselect(
+        "Categories", config.EXPENSE_CATEGORIES,
+        default=["Groceries", "Dining", "Travel"],
+    )
+    if trend_cats:
+        trend = actuals[actuals["category"].isin(trend_cats)]
+        fig_t = px.line(trend, x="month", y="spend", color="category",
+                        markers=True, title="Monthly spend vs. budget (dashed)")
+        for cat in trend_cats:
+            fig_t.add_hline(y=config.MONTHLY_BUDGET[cat], line_dash="dash",
+                            opacity=0.4, annotation_text=f"{cat} budget")
+        st.plotly_chart(fig_t, use_container_width=True)
+
 # --- Forecast ---------------------------------------------------------------
 with tab_fc:
     horizon = st.slider("Forecast horizon (months)", 3, 18, 12)
     fc = forecast.forecast_cashflow(actuals, horizon=horizon)
     try:
         mape = forecast.backtest_mape(actuals)
-        st.metric("Backtest MAPE", f"{mape:.1%}")
+        st.metric("Backtest MAPE (production model)", f"{mape:.1%}")
     except ValueError:
         st.info("Not enough history to backtest.")
 
@@ -92,15 +124,41 @@ with tab_fc:
     fig.update_layout(title="Monthly net cash flow: actual vs. forecast")
     st.plotly_chart(fig, use_container_width=True)
 
+    st.subheader("Model selection (6-month holdout backtest)")
+    st.caption("The production model must beat the naive baseline to earn its place.")
+    try:
+        comp = forecast.compare_models(actuals)
+        comp["mape"] = comp["mape"].map(lambda m: f"{m:.1%}")
+        st.dataframe(comp, use_container_width=True, hide_index=True)
+    except ValueError:
+        st.info("Not enough history for model comparison.")
+
 # --- Monte Carlo ------------------------------------------------------------
 with tab_mc:
+    live = load_live_assumptions()
+    if live["source"] == "live market data":
+        st.caption(f"Defaults estimated from **live {live['ticker']} history** "
+                   f"({live['n_months_of_history']} months): "
+                   f"return {live['annual_return_mean']:.1%}, "
+                   f"vol {live['annual_return_std']:.1%}, "
+                   f"inflation {live['annual_inflation']:.1%}.")
+    else:
+        st.caption("Live market data unavailable — using static defaults.")
+
     d = config.SIM_DEFAULTS
     col = st.columns(3)
     contrib = col[0].number_input("Monthly contribution ($)", value=float(d["monthly_contribution"]), step=100.0)
-    ret = col[1].slider("Expected annual return", 0.0, 0.15, d["annual_return_mean"], 0.005)
+    ret = col[1].slider("Expected annual return", 0.0, 0.15,
+                        float(min(max(live["annual_return_mean"], 0.0), 0.15)), 0.005)
     goal = col[2].number_input("Goal ($)", value=float(d["goal"]), step=10_000.0)
 
-    res = montecarlo.simulate(monthly_contribution=contrib, annual_return_mean=ret, goal=goal)
+    res = montecarlo.simulate(
+        monthly_contribution=contrib,
+        annual_return_mean=ret,
+        annual_return_std=live["annual_return_std"],
+        annual_inflation=live["annual_inflation"],
+        goal=goal,
+    )
     st.metric(f"Probability of reaching ${goal:,.0f} in {res.horizon_years} yrs",
               f"{res.prob_goal:.1%}")
 

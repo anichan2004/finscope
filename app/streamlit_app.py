@@ -20,6 +20,7 @@ from finscope import (  # noqa: E402
     config,
     data_generator,
     database,
+    edgar,
     forecast,
     market_data,
     montecarlo,
@@ -58,13 +59,18 @@ def load_actuals() -> pd.DataFrame:
     return actuals
 
 
+@st.cache_data(ttl=24 * 3600, show_spinner="Fetching SEC filings...")
+def load_company(ticker: str):
+    return edgar.get_company_financials(ticker)
+
+
 actuals = load_actuals()
 
 st.title("FinScope — Personal FP&A Platform")
-st.caption("Budget variance · rolling forecast · Monte Carlo planning · financial statements")
+st.caption("Budget variance · rolling forecast · Monte Carlo planning · financial statements · real company analysis")
 
-tab_var, tab_fc, tab_mc, tab_stmt = st.tabs(
-    ["Variance", "Forecast", "Monte Carlo", "Statements & KPIs"]
+tab_var, tab_fc, tab_mc, tab_stmt, tab_co = st.tabs(
+    ["Variance", "Forecast", "Monte Carlo", "Statements & KPIs", "Company Analysis"]
 )
 
 # --- Variance ---------------------------------------------------------------
@@ -185,3 +191,103 @@ with tab_stmt:
     m[1].metric("Monthly Burn", f"${k['burn_rate']:,.0f}")
     m[2].metric("Runway", f"{k['runway_months']:.0f} mo")
     m[3].metric("Debt-to-Income", f"{k['debt_to_income']:.2f}")
+
+# --- Company Analysis (real SEC EDGAR data) ---------------------------------
+with tab_co:
+    st.markdown(
+        "Analyze any US public company using its **actual SEC filings** "
+        "(10-Q / 10-K via the free EDGAR API). Same FP&A toolkit, real data."
+    )
+    ticker = st.text_input("Ticker", value="AAPL", max_chars=6).strip().upper()
+
+    if ticker:
+        try:
+            name, fin = load_company(ticker)
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Could not load {ticker}: {exc}")
+            fin = pd.DataFrame()
+            name = ticker
+
+        if fin.empty or "revenue" not in fin or fin["revenue"].dropna().empty:
+            if not fin.empty:
+                st.warning("Filings found, but revenue could not be mapped "
+                           "for this company's tagging.")
+        else:
+            rev = fin["revenue"].dropna()
+            latest_q = rev.index[-1].date()
+            g = edgar.qoq_yoy(fin, "revenue")
+            yoy = g["yoy_growth"].iloc[-1] if not g.empty else float("nan")
+
+            st.subheader(f"{name} — quarterly fundamentals "
+                         f"(latest: {latest_q})")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Revenue (latest Q)", f"${rev.iloc[-1]/1e9:,.1f}B")
+            if pd.notna(yoy):
+                c2.metric("Revenue YoY", f"{yoy:+.1%}",
+                          delta_color="normal" if yoy >= 0 else "inverse")
+            if "net_margin" in fin and fin["net_margin"].notna().any():
+                c3.metric("Net Margin (latest Q)",
+                          f"{fin['net_margin'].dropna().iloc[-1]:.1%}")
+
+            # Revenue & net income trend
+            plot_df = fin.reset_index()
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=plot_df["quarter_end"], y=plot_df["revenue"],
+                                 name="Revenue", marker_color="#1565c0"))
+            if "net_income" in fin:
+                fig.add_trace(go.Scatter(x=plot_df["quarter_end"],
+                                         y=plot_df["net_income"],
+                                         name="Net income", mode="lines+markers",
+                                         line=dict(color="#ef6c00")))
+            fig.update_layout(title="Revenue and net income by quarter (USD)")
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Margins
+            margin_cols = [c for c in ("gross_margin", "operating_margin",
+                                       "net_margin") if c in fin]
+            if margin_cols:
+                mfig = px.line(plot_df, x="quarter_end", y=margin_cols,
+                               markers=True, title="Margin trend")
+                mfig.update_layout(yaxis_tickformat=".0%")
+                st.plotly_chart(mfig, use_container_width=True)
+
+            # Growth variance table -- the earnings-cycle view
+            st.subheader("Growth analysis (QoQ / YoY)")
+            gt = g.copy()
+            gt.index = gt.index.date
+            gt["revenue"] = gt["revenue"].map(lambda v: f"${v/1e9:,.2f}B")
+            for col in ("qoq_growth", "yoy_growth"):
+                gt[col] = gt[col].map(
+                    lambda v: f"{v:+.1%}" if pd.notna(v) else "—")
+            st.dataframe(gt.tail(8), use_container_width=True)
+
+            # Revenue forecast with the model bake-off, on REAL data
+            st.subheader("Revenue forecast (next 4 quarters)")
+            if len(rev) >= 10:
+                rev_q = rev.copy()
+                rev_q.index = pd.PeriodIndex(rev_q.index, freq="Q")
+                fc_q = forecast.exp_smoothing_forecast(rev_q, horizon=4, freq="Q")
+
+                hold = 4
+                train, test = rev_q.iloc[:-hold], rev_q.iloc[-hold:]
+                pred = forecast.exp_smoothing_forecast(train, horizon=hold, freq="Q")
+                mape_q = forecast._mape(test.to_numpy(dtype=float),
+                                        pred.to_numpy(dtype=float))
+                st.metric("Backtest MAPE (last 4 quarters held out)",
+                          f"{mape_q:.1%}")
+
+                ffig = go.Figure()
+                ffig.add_trace(go.Scatter(x=rev_q.index.astype(str), y=rev_q.values,
+                                          name="actual", mode="lines+markers",
+                                          line=dict(color="#1565c0")))
+                ffig.add_trace(go.Scatter(x=fc_q.index.astype(str), y=fc_q.values,
+                                          name="forecast", mode="lines+markers",
+                                          line=dict(color="#ef6c00", dash="dot")))
+                ffig.update_layout(title="Quarterly revenue: actual vs. forecast")
+                st.plotly_chart(ffig, use_container_width=True)
+            else:
+                st.info("Not enough quarterly history to forecast.")
+
+            st.caption("Source: SEC EDGAR company facts (10-Q/10-K filings). "
+                       "Q4 figures derived as FY minus reported quarters where "
+                       "not filed directly.")

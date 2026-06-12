@@ -20,3 +20,11 @@ def test_summary_consistency(actuals):
     report = variance.variance_report(actuals)
     s = variance.variance_summary(report)
     assert abs(s["total_variance"] - (s["total_budget"] - s["total_actual"])) < 1e-2
+
+
+def test_commentary_returns_lines(actuals):
+    report = variance.variance_report(actuals)
+    lines = variance.variance_commentary(actuals, report)
+    assert isinstance(lines, list)
+    assert len(lines) >= 1
+    assert all(isinstance(x, str) and x.endswith(".") for x in lines)

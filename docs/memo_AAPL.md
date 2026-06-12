@@ -1,27 +1,24 @@
 # Quarterly Fundamentals Review: Apple Inc. (AAPL)
 
 **To:** Investment file
-**From:** [Your name]
-**Date:** [Date]
-**Re:** Q[X] FY20[XX] results — revenue trajectory, margin quality, and 4-quarter outlook
+**From:** [Anirudh Chandramouleeswaran]
+**Date:** [June 12, 2026]
+**Re:** Q2 FY202026 results — revenue trajectory, margin quality, and 4-quarter outlook
 **Prepared with:** FinScope (SEC EDGAR 10-Q/10-K data; methodology in §6)
 
 ---
 
 ## 1. Executive summary
 
-Apple reported revenue of **$[XX.X]B** in its latest filed quarter (period
-ended [date]), [up/down] **[X.X]%** year over year. Net margin stood at
-**[XX.X]%**, [expanding/compressing/holding steady] versus [XX.X]% four
-quarters ago. A level forecast backtested at **[X.X]% MAPE** over the last
-four quarters projects revenue of roughly **$[XX]B–$[XX]B** per quarter over
+Apple reported revenue of **$[111.2]B** in its latest filed quarter (period
+ended [March 28,2026]), [up/down] **[16.6]%** year over year. Net margin stood at
+**[26.6]%**, [holding steady] versus [26.0]% four
+quarters ago. A level forecast backtested at **[11.7]% MAPE** over the last
+four quarters projects revenue of roughly **$[115]B** per quarter over
 the next year, before seasonality.
 
 > DECISION POINT — your one-sentence verdict goes here. Pick the honest one:
-> "Fundamentals remain steady with no deterioration visible in the filings,"
-> or "Growth is decelerating while margins hold, which bears watching," or
-> whatever the numbers actually say. This sentence is the memo. Everything
-> below is evidence for it.
+> Apple's fundamentals have strengthened meaningfully over the past two quarters: revenue growth has roughly tripled from its 2024 pace while gross margin reached its highest level in the eight-quarter window — an acceleration with quality, though its durability depends on the current product cycle.
 
 [Your verdict sentence.]
 

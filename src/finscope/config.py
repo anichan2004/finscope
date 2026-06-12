@@ -59,3 +59,20 @@ SIM_DEFAULTS = {
     "goal": 750_000.0,
     "n_simulations": 10_000,
 }
+
+# --- Investment watchlist ----------------------------------------------------
+# The personal balance sheet carries an investments line; this watchlist is
+# the research universe for those holdings -- the companies behind the money.
+# Used by the Portfolio Research page (SEC EDGAR analysis).
+WATCHLIST = {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "GOOGL": "Alphabet",
+    "AMZN": "Amazon",
+    "NVDA": "NVIDIA",
+    "JPM": "JPMorgan Chase",
+    "JNJ": "Johnson & Johnson",
+    "WMT": "Walmart",
+    "KO": "Coca-Cola",
+    "XOM": "ExxonMobil",
+}

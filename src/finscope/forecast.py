@@ -36,11 +36,63 @@ def exp_smoothing_forecast(
     return pd.Series([level] * horizon, index=future_index, name="forecast")
 
 
+def _seasonal_indices(series: pd.Series) -> dict[int, float]:
+    """Month-of-year seasonal indices: each month's average relative to the
+    overall average, normalized so the indices mean 1.0. December at 0.85
+    means December typically runs 15% below a normal month."""
+    df = pd.DataFrame({"v": series.to_numpy(dtype=float),
+                       "m": [p.month for p in series.index]})
+    overall = df["v"].mean()
+    if overall == 0:
+        return {m: 1.0 for m in range(1, 13)}
+    idx = (df.groupby("m")["v"].mean() / overall).to_dict()
+    # months absent from history default to neutral
+    full = {m: float(idx.get(m, 1.0)) for m in range(1, 13)}
+    norm = sum(full.values()) / 12.0
+    return {m: v / norm for m, v in full.items()}
+
+
+def seasonal_exp_smoothing_forecast(
+    series: pd.Series, horizon: int = 12, alpha: float = 0.4
+) -> pd.Series:
+    """Exponential smoothing with multiplicative month-of-year seasonality.
+
+    Deseasonalize history, smooth the level, then reapply each future
+    month's seasonal factor. Captures repeating patterns (e.g. a year-end
+    spending spike) that a flat level forecast deliberately ignores.
+    """
+    indices = _seasonal_indices(series)
+    deseason = pd.Series(
+        [v / indices[p.month] for p, v in series.items()], index=series.index
+    )
+    level_fc = exp_smoothing_forecast(deseason, horizon=horizon, alpha=alpha)
+    out = pd.Series(
+        [lvl * indices[p.month] for p, lvl in level_fc.items()],
+        index=level_fc.index, name="forecast",
+    )
+    return out
+
+
 def forecast_cashflow(
-    actuals: pd.DataFrame, horizon: int = 12, alpha: float = 0.4
+    actuals: pd.DataFrame, horizon: int = 12, alpha: float = 0.4,
+    method: str = "auto",
 ) -> pd.DataFrame:
+    """Forecast net cash flow. method='auto' runs the model bake-off on a
+    holdout and ships the champion -- challenger models (like seasonal) only
+    take over production when they actually beat the incumbent."""
     series = _monthly_net_series(actuals)
-    fc = exp_smoothing_forecast(series, horizon=horizon, alpha=alpha)
+
+    if method == "auto":
+        try:
+            champion = compare_models(actuals).iloc[0]["model"]
+        except ValueError:
+            champion = "Exponential smoothing"
+        method = "seasonal" if champion == "Seasonal exp smoothing" else "plain"
+
+    if method == "seasonal" and len(series) >= 18:
+        fc = seasonal_exp_smoothing_forecast(series, horizon=horizon, alpha=alpha)
+    else:
+        fc = exp_smoothing_forecast(series, horizon=horizon, alpha=alpha)
     hist = series.rename("actual").to_frame()
     hist["type"] = "actual"
     fut = fc.rename("actual").to_frame()
@@ -96,6 +148,9 @@ def compare_models(actuals: pd.DataFrame, holdout: int = 6) -> pd.DataFrame:
 
     es = exp_smoothing_forecast(train, horizon=holdout)
     results.append(("Exponential smoothing", _mape(actual, es.to_numpy(dtype=float))))
+
+    seas = seasonal_exp_smoothing_forecast(train, horizon=holdout)
+    results.append(("Seasonal exp smoothing", _mape(actual, seas.to_numpy(dtype=float))))
 
     df = pd.DataFrame(results, columns=["model", "mape"]).sort_values("mape")
     df["mape"] = df["mape"].round(4)

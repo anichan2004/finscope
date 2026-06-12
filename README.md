@@ -6,7 +6,7 @@
 
 **[▶ Try the live dashboard](https://finscope-p5urvdzp2du7ulmumu3jeq.streamlit.app/)** — analyze any US public company from real SEC filings, plus live-market-data planning.
 
-<img width="1918" height="962" alt="image" src="https://github.com/user-attachments/assets/7454ca33-253c-44b3-9029-e6769888f6cc" />
+<img width="1917" height="1017" alt="image" src="https://github.com/user-attachments/assets/05b5ea1c-9aed-4908-90c2-3418c4363b3e" />
 
 
 FinScope applies the methods a corporate **Financial Planning & Analysis (FP&A)** team

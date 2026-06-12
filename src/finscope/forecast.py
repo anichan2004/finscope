@@ -23,7 +23,7 @@ def _monthly_net_series(actuals: pd.DataFrame) -> pd.Series:
 
 
 def exp_smoothing_forecast(
-    series: pd.Series, horizon: int = 12, alpha: float = 0.4
+    series: pd.Series, horizon: int = 12, alpha: float = 0.4, freq: str = "M"
 ) -> pd.Series:
     """Simple exponential smoothing; flat forward projection of the level."""
     values = series.to_numpy(dtype=float)
@@ -32,7 +32,7 @@ def exp_smoothing_forecast(
         level = alpha * v + (1 - alpha) * level
 
     last_period = series.index[-1]
-    future_index = pd.period_range(last_period + 1, periods=horizon, freq="M")
+    future_index = pd.period_range(last_period + 1, periods=horizon, freq=freq)
     return pd.Series([level] * horizon, index=future_index, name="forecast")
 
 

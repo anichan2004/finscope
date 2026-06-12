@@ -1,12 +1,4 @@
 # FinScope — A Personal FP&A Platform
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-FF4B4B?logo=streamlit)](YOUR_STREAMLIT_URL)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/anichan2004/finscope/blob/main/notebooks/finscope_colab.ipynb)
-[![CI](https://github.com/anichan2004/finscope/actions/workflows/ci.yml/badge.svg)](https://github.com/anichan2004/finscope/actions/workflows/ci.yml)
-
-**[▶ Try the live dashboard](https://finscope-p5urvdzp2du7ulmumu3jeq.streamlit.app/)** · built with Python, SQL, and live market data.
-
-<img width="1917" height="968" alt="image" src="https://github.com/user-attachments/assets/3d74118f-dec0-494c-9045-188dad656e52" />
-
 
 FinScope applies the methods a corporate **Financial Planning & Analysis (FP&A)** team
 uses to run a business — budget-vs-actual variance analysis, rolling forecasts,
@@ -22,6 +14,7 @@ financial modeling, forecasting, and dashboarding**, with tests and CI on top.
 | Transactions | Synthetic generator | No — personal bank data is private. Production uses **Plaid** (consent-based bank aggregation). |
 | Market returns | S&P 500 via **yfinance** (Stooq fallback) | **Yes** — drives the Monte Carlo off real return & volatility |
 | Inflation | **FRED** CPI (free API key) | **Yes** — goal is discounted with live macro data |
+| Corporate financials | **SEC EDGAR** company facts (10-Q/10-K) | **Yes** — real filings for any US public ticker, no API key |
 
 No real personal financial information is ever committed. The planning model runs on
 **live market data**; the transaction layer is synthetic-but-clearly-labeled, with
@@ -37,6 +30,7 @@ Plaid documented as the real-data path (see *Extensions*).
 | Rolling cash-flow forecast | Exponential-smoothing forecast with a **MAPE backtest** | `forecast.py` |
 | Monte Carlo planning | 10,000-path net-worth simulation → probability of hitting a goal (in real $) | `montecarlo.py` |
 | Live market + macro data | Real S&P 500 returns & FRED inflation feeding the simulation | `market_data.py` |
+| **Real company analysis** | Any US public company's actual filings via **SEC EDGAR**: quarterly fundamentals, margins, QoQ/YoY growth, revenue forecast | `edgar.py` |
 | Personal 3-statement view | Income statement, balance sheet, KPIs (savings rate, runway, DTI) | `statements.py` |
 | SQL aggregation | Monthly rollups done in SQL on a SQLite store | `database.py` |
 | Excel automation | Formatted, color-coded variance workbook via openpyxl | `excel_report.py` |
@@ -90,6 +84,14 @@ an FP&A team runs on its rolling forecast.
 annual mean/volatility; contributions are added each month; terminal values are
 deflated to today's dollars so the goal is interpreted in **real** terms. The output
 is the full distribution plus the probability of reaching the goal.
+
+**Company analysis (EDGAR).** Quarterly fundamentals are mapped from raw XBRL
+company facts. Two real-world wrinkles are handled explicitly: companies tag the
+same concept differently (e.g. `Revenues` vs
+`RevenueFromContractWithCustomerExcludingAssessedTax`), so each concept tries an
+ordered list of candidate tags; and Q4 income-statement figures are usually not
+filed directly — the 10-K reports the full year — so **Q4 is derived as FY minus
+the three reported quarters**. Parsing is unit-tested against a controlled payload.
 
 ---
 

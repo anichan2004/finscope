@@ -1,10 +1,5 @@
 # FinScope — A Personal FP&A Platform
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Streamlit-FF4B4B?logo=streamlit)](YOUR_STREAMLIT_URL)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/anichan2004/finscope/blob/main/notebooks/finscope_colab.ipynb)
-[![CI](https://github.com/anichan2004/finscope/actions/workflows/ci.yml/badge.svg)](https://github.com/anichan2004/finscope/actions/workflows/ci.yml)
-
-**[▶ Try the live dashboard](https://finscope-p5urvdzp2du7ulmumu3jeq.streamlit.app/)** — analyze any US public company from real SEC filings, plus live-market-data planning.
 FinScope applies the methods a corporate **Financial Planning & Analysis (FP&A)** team
 uses to run a business — budget-vs-actual variance analysis, rolling forecasts,
 scenario simulation, and financial-statement reporting — to personal finances.
@@ -81,9 +76,14 @@ positive variance is *favorable* (you spent less than planned). This matches how
 real variance report reads.
 
 **Forecasting.** Net monthly cash flow is projected with simple exponential
-smoothing. The choice is deliberate — it is explainable and the backtest (train on
-all but the last *n* months, score MAPE on the holdout) is the same accuracy check
-an FP&A team runs on its rolling forecast.
+smoothing under a **champion/challenger** framework: candidate models (naive,
+moving average, exponential smoothing, seasonal exponential smoothing) are
+backtested on a holdout and production auto-selects the winner by MAPE.
+Notably, the **seasonal challenger lost** (18.2% vs 6.7% MAPE): the data's
+year-end spending spike is real, but estimating twelve monthly indices from
+~2 years of history overfits noise in ten months to capture signal in two.
+The negative result is kept and documented — model choice here is evidence,
+not preference.
 
 **Monte Carlo.** Monthly returns are drawn from a normal distribution implied by the
 annual mean/volatility; contributions are added each month; terminal values are
